@@ -1,6 +1,27 @@
 ---
 services:
 
+  traefik:
+    image: traefik:latest
+    command:
+      #- "--log.level=DEBUG"
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
+      #- "--certificatesresolvers.myresolver.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory"
+      - "--certificatesresolvers.myresolver.acme.email=vtiger@realmit.io"
+      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+    ports:
+      - "443:443"
+      - "8080:8080"
+    volumes:
+      - ./letsencrypt:/letsencrypt
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - vtiger_net
+
   database:
     image: mysql:5.7
     restart: unless-stopped
@@ -8,26 +29,26 @@ services:
       - "127.0.0.1:3307:3306"
     volumes:
       - vtiger_data:/data
-    environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: vtigerdb
+    env_file:
+      - .env
     networks:
       - vtiger_net
 
   vtiger:
     image: ghcr.io/lorddistrict/vtiger/vtiger:latest
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:9000:80"
     volumes:
       - vtiger:/var/lib/vtiger
-    environment:
-      VT_SITE_URL: http://127.0.0.1:9000
-      MYSQL_HOST: database
-      MYSQL_DATABASE: vtigerdb
-      MYSQL_ROOT_PASSWORD: root
+    env_file:
+      - .env
     depends_on:
       - database
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.vtiger.rule=Host(`vtiger.dev.altair.realmit.io`)"
+      - "traefik.http.routers.vtiger.entrypoints=websecure"
+      - "traefik.http.routers.vtiger.tls.certresolver=myresolver"
+      - "traefik.http.services.vtiger.loadbalancer.server.port=80"
     networks:
       - vtiger_net
 
